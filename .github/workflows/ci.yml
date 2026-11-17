@@ -1,0 +1,102 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: paved CLI, policy engine, MCP plugin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -e ".[dev]"
+      - run: ruff check . && ruff format --check .
+      - run: pytest
+
+  terraform:
+    name: Terraform fmt, validate, test, tflint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.12.x"
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive
+      - name: Validate and test every root and module
+        run: |
+          for dir in bootstrap modules/network modules/eks modules/github-oidc platform; do
+            echo "::group::$dir"
+            terraform -chdir="$dir" init -backend=false -input=false
+            terraform -chdir="$dir" validate
+            if [ -d "$dir/tests" ]; then terraform -chdir="$dir" test; fi
+            echo "::endgroup::"
+          done
+      - uses: terraform-linters/setup-tflint@v4
+        with:
+          tflint_version: v0.59.1
+      - run: tflint --init --config "$PWD/.tflint.hcl" && tflint --recursive --config "$PWD/.tflint.hcl"
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+
+  pulumi:
+    name: Pulumi platform layer (mocked unit tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/pulumi
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: infra/pulumi/requirements.txt
+      - run: pip install -r requirements.txt
+      - run: pytest -o addopts="" -q tests
+
+  alerts:
+    name: Prometheus rules (promtool check and unit tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: Install promtool
+        run: |
+          curl -sSL https://github.com/prometheus/prometheus/releases/download/v3.5.0/prometheus-3.5.0.linux-amd64.tar.gz | tar xz
+          echo "$PWD/prometheus-3.5.0.linux-amd64" >> "$GITHUB_PATH"
+      - run: make promtool
+
+  # Dogfood: the example service goes through the same reusable pipeline that every
+  # generated service uses (tests, policy gate with PR annotations, multi arch build).
+  example-service:
+    name: Example service
+    uses: ./.github/workflows/service-ci.yml
+    with:
+      service-path: examples/orders-consumer
+      image-name: orders-consumer
+      paved-package: . # this commit's CLI, not main's
+      push: false
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write

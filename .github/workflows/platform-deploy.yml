@@ -1,0 +1,109 @@
+# Deploys the platform: Terraform foundation, then the Pulumi layer on top.
+#
+# Runs on the self hosted `paved-platform` runner scale set, which lives inside the VPC
+# because the EKS API endpoint is private. Jobs are skipped until the repository
+# variables below are set, so forks and clones stay green without AWS access.
+#
+#   vars.AWS_PLAN_ROLE_ARN    terraform output ci_plan_role_arn (repository variable)
+#   vars.AWS_DEPLOY_ROLE_ARN  terraform output ci_apply_role_arn (environment variable)
+#   vars.PULUMI_BACKEND_URL   s3://<state bucket>/pulumi?region=us-west-2
+name: platform-deploy
+
+on:
+  push:
+    branches: [main]
+    paths: ["infra/**", "platform/**"]
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [dev, prod]
+        default: dev
+
+permissions:
+  contents: read
+
+env:
+  ENVIRONMENT: ${{ inputs.environment || 'dev' }}
+  TF_IN_AUTOMATION: "1"
+
+jobs:
+  plan:
+    if: vars.AWS_PLAN_ROLE_ARN != ''
+    runs-on: paved-platform
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: infra/terraform/platform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: us-west-2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.12.x"
+          terraform_wrapper: false
+      - run: terraform init -input=false -backend-config="env/$ENVIRONMENT.backend.hcl"
+      - run: terraform plan -input=false -lock-timeout=5m -var-file="env/$ENVIRONMENT.tfvars" -out=tfplan
+      - name: Plan summary
+        run: |
+          {
+            echo "### Terraform plan: $ENVIRONMENT"
+            echo '```'
+            terraform show -no-color tfplan | tail -n 200
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tfplan-${{ env.ENVIRONMENT }}
+          path: infra/terraform/platform/tfplan
+          retention-days: 5
+
+  apply:
+    needs: plan
+    runs-on: paved-platform
+    # The GitHub environment has required reviewers, and the AWS apply role trusts only
+    # tokens issued for this environment, so an unreviewed run cannot assume it.
+    environment: ${{ inputs.environment || 'dev' }}
+    concurrency:
+      group: platform-apply-${{ inputs.environment || 'dev' }}
+      cancel-in-progress: false # never kill an apply halfway; see the state lock runbook
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-west-2
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.12.x"
+          terraform_wrapper: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: tfplan-${{ env.ENVIRONMENT }}
+          path: infra/terraform/platform
+      - name: Terraform apply (exactly the reviewed plan)
+        working-directory: infra/terraform/platform
+        run: |
+          terraform init -input=false -backend-config="env/$ENVIRONMENT.backend.hcl"
+          terraform apply -input=false -lock-timeout=5m tfplan
+          terraform output -json > "../../pulumi/tf-outputs.$ENVIRONMENT.json"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r infra/pulumi/requirements.txt
+      - name: Pulumi up (add-ons, team tenancy, runners)
+        uses: pulumi/actions@v6
+        with:
+          command: up
+          stack-name: ${{ env.ENVIRONMENT }}
+          work-dir: infra/pulumi
+        env:
+          PULUMI_BACKEND_URL: ${{ vars.PULUMI_BACKEND_URL }}

@@ -1,0 +1,99 @@
+# Local paved road: Kafka (Redpanda), the example consumer, a producer with W3C trace
+# context, an OpenTelemetry collector, Jaeger and Prometheus loaded with the platform
+# alert rules.
+#
+#   make local-up     then open Jaeger at http://localhost:16686 and
+#                     Prometheus at http://localhost:9090/alerts
+#   make local-down
+#
+# The consumer runs with the same constraints as in Kubernetes: non root, read only
+# root filesystem, no capabilities.
+name: paved-road
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    command:
+      - redpanda start --overprovisioned --smp 1 --memory 1G --reserve-memory 0M
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --mode dev-container
+    ports: ["19092:19092"]
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "health", "--exit-when-healthy"]
+      interval: 5s
+      retries: 20
+
+  topics:
+    image: redpandadata/redpanda:v24.2.7
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        rpk topic create orders --partitions 6 -X brokers=redpanda:9092 || true;
+        rpk topic create orders.dlq --partitions 1 -X brokers=redpanda:9092 || true
+    restart: "no"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+    command: ["--config=/etc/otelcol/config.yaml"]
+    volumes:
+      - ./otel-collector.yaml:/etc/otelcol/config.yaml:ro
+    depends_on: [jaeger]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["16686:16686"]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ../build/prometheus-rules.yaml:/etc/prometheus/rules/platform.yaml:ro
+    ports: ["9090:9090"]
+
+  orders-consumer:
+    build: ../examples/orders-consumer
+    depends_on:
+      topics:
+        condition: service_completed_successfully
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      KAFKA_TOPIC: orders
+      KAFKA_GROUP_ID: orders-consumer
+      KAFKA_DLQ_TOPIC: orders.dlq
+      OTEL_SERVICE_NAME: orders-consumer
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=local,team=payments
+      LOG_FORMAT: json
+    read_only: true
+    tmpfs: ["/tmp:size=64m"]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          memory: 256m
+
+  producer:
+    # Reuses the consumer image, which already has the Kafka and OpenTelemetry libraries.
+    build: ../examples/orders-consumer
+    depends_on:
+      topics:
+        condition: service_completed_successfully
+    entrypoint: ["python", "/producer/producer.py"]
+    volumes:
+      - ./producer.py:/producer/producer.py:ro
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      KAFKA_TOPIC: orders
+      RATE_PER_SECOND: "20"
+      MALFORMED_RATIO: "0.02"
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+    read_only: true
+    cap_drop: [ALL]

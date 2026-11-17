@@ -1,0 +1,112 @@
+# Reusable pipeline for paved road services. A generated service's ci.yml is about ten
+# lines that call this, so improvements land everywhere by updating one file.
+name: service-ci
+
+on:
+  workflow_call:
+    inputs:
+      service-path:
+        description: Directory containing the service (Dockerfile, deploy/k8s).
+        type: string
+        default: "."
+      image-name:
+        description: ECR repository name.
+        type: string
+        required: true
+      python-version:
+        type: string
+        default: "3.12"
+      runner:
+        description: runs-on label. Use your team's scale set (paved-<team>) for VPC access.
+        type: string
+        default: ubuntu-latest
+      push:
+        description: Push the image to ECR (main branch only).
+        type: boolean
+        default: false
+      aws-role-arn:
+        description: ECR push role from the platform layer, assumed through GitHub OIDC.
+        type: string
+        default: ""
+      aws-region:
+        type: string
+        default: us-west-2
+      paved-package:
+        description: pip requirement for the paved CLI (pin a tag or SHA for reproducibility).
+        type: string
+        default: paved-road @ git+https://github.com/pragathigopal7/paved-road@main
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ${{ inputs.runner }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.service-path }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ inputs.python-version }}
+      - run: pip install -r requirements-dev.txt
+      - run: pytest -q
+
+  policy:
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install paved
+        run: pip install "${{ inputs.paved-package }}"
+      - name: Policy gate (findings show up as PR annotations)
+        run: paved check "${{ inputs.service-path }}/deploy" --format github
+      - name: Policy report for code scanning
+        if: always()
+        run: paved check "${{ inputs.service-path }}/deploy" --format sarif -o paved.sarif || true
+      - uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        continue-on-error: true # code scanning may be disabled on private forks
+        with:
+          sarif_file: paved.sarif
+          category: paved-policy-${{ inputs.image-name }}
+
+  image:
+    needs: [test, policy]
+    runs-on: ${{ inputs.runner }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - name: AWS credentials through GitHub OIDC (no stored keys)
+        if: inputs.push
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ inputs.aws-role-arn }}
+          aws-region: ${{ inputs.aws-region }}
+      - name: Log in to ECR
+        if: inputs.push
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+      # amd64 and arm64: platform nodes are Graviton, CI runners are x86.
+      - name: Build${{ inputs.push && ' and push' || '' }}
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.service-path }}
+          platforms: linux/amd64,linux/arm64
+          push: ${{ inputs.push }}
+          tags: ${{ steps.ecr.outputs.registry || 'local' }}/${{ inputs.image-name }}:${{ github.sha }}
+          cache-from: type=gha,scope=${{ inputs.image-name }}
+          cache-to: type=gha,mode=max,scope=${{ inputs.image-name }}
+          # Attestations need a registry to live in, so only when pushing.
+          provenance: ${{ inputs.push && 'mode=max' || 'false' }}
+          sbom: ${{ inputs.push }}
