@@ -27,3 +27,8 @@ output "node_groups" {
   description = "Node group names keyed by pool."
   value       = { for k, g in aws_eks_node_group.this : k => g.node_group_name }
 }
+
+output "admin_access_entries" {
+  description = "Cluster admin access entries keyed by name."
+  value       = { for k, e in aws_eks_access_entry.admin : k => e.principal_arn }
+}

@@ -30,10 +30,10 @@ variable "public_access_cidrs" {
   }
 }
 
-variable "admin_role_arns" {
-  description = "IAM roles granted cluster admin through EKS access entries."
-  type        = list(string)
-  default     = []
+variable "admin_roles" {
+  description = "IAM roles granted cluster admin through EKS access entries, keyed by a stable name."
+  type        = map(string)
+  default     = {}
 }
 
 variable "log_retention_days" {

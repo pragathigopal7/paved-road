@@ -105,6 +105,11 @@ run "dev" {
     condition     = length(aws_iam_openid_connect_provider.github) == 1
     error_message = "The first environment in an account creates the GitHub OIDC provider."
   }
+
+  assert {
+    condition     = contains(keys(module.eks.admin_access_entries), "ci-apply")
+    error_message = "The CI apply role needs cluster access for the Pulumi layer."
+  }
 }
 
 run "prod_reuses_the_account_oidc_provider" {

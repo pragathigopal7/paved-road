@@ -84,8 +84,10 @@ resource "aws_eks_cluster" "this" {
 
 # Cluster access ------------------------------------------------------------------------
 
+# Keyed by a static name, because role ARNs created in the same apply are unknown at
+# plan time and cannot be for_each keys.
 resource "aws_eks_access_entry" "admin" {
-  for_each = toset(var.admin_role_arns)
+  for_each = var.admin_roles
 
   cluster_name  = aws_eks_cluster.this.name
   principal_arn = each.value
@@ -93,7 +95,7 @@ resource "aws_eks_access_entry" "admin" {
 }
 
 resource "aws_eks_access_policy_association" "admin" {
-  for_each = toset(var.admin_role_arns)
+  for_each = var.admin_roles
 
   cluster_name  = aws_eks_cluster.this.name
   principal_arn = each.value

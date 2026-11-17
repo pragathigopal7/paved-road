@@ -95,6 +95,9 @@ module "eks" {
   subnet_ids             = module.network.private_subnet_ids
   endpoint_public_access = length(var.api_allowed_cidrs) > 0
   public_access_cidrs    = var.api_allowed_cidrs
-  admin_role_arns        = concat(var.admin_role_arns, [module.ci_apply.role_arn])
-  node_groups            = var.node_groups
+  admin_roles = merge(
+    { for arn in var.admin_role_arns : arn => arn },
+    { ci-apply = module.ci_apply.role_arn },
+  )
+  node_groups = var.node_groups
 }

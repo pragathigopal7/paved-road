@@ -49,7 +49,7 @@ variables {
   cluster_name       = "paved-test"
   kubernetes_version = "1.33"
   subnet_ids         = ["subnet-aaa", "subnet-bbb", "subnet-ccc"]
-  admin_role_arns    = ["arn:aws:iam::123456789012:role/platform-admin"]
+  admin_roles        = { platform-admin = "arn:aws:iam::123456789012:role/platform-admin" }
 
   node_groups = {
     general = {
