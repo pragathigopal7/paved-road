@@ -1,0 +1,119 @@
+# OpenTelemetry collector (opentelemetry-collector chart), gateway mode in
+# `observability`. Every service sends OTLP here; this is the one place that knows
+# which vendors sit behind traces, metrics and logs.
+#
+# Pulumi sets the environment specific parts through extraEnvs:
+#   AMP_REMOTE_WRITE_URL, TRACES_OTLP_ENDPOINT, LOGS_ENDPOINT, CLUSTER_NAME, AWS_REGION
+
+mode: deployment
+fullnameOverride: otel-collector # Service DNS: otel-collector.observability.svc
+replicaCount: 2
+
+image:
+  repository: otel/opentelemetry-collector-contrib
+
+serviceAccount:
+  create: true
+  name: otel-collector
+
+presets:
+  # Adds k8sattributes (pod, namespace, deployment, node) to every signal, with RBAC.
+  kubernetesAttributes:
+    enabled: true
+
+ports:
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+  metrics:
+    enabled: true
+
+serviceMonitor:
+  enabled: true
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    memory: 512Mi
+
+securityContext:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+
+config:
+  extensions:
+    health_check:
+      endpoint: ${env:MY_POD_IP}:13133
+    sigv4auth:
+      region: ${env:AWS_REGION}
+      service: aps
+
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: ${env:MY_POD_IP}:4317
+        http:
+          endpoint: ${env:MY_POD_IP}:4318
+
+  processors:
+    # First in every pipeline: refuse data before the pod is OOM killed.
+    memory_limiter:
+      check_interval: 1s
+      limit_percentage: 80
+      spike_limit_percentage: 25
+    resource/cluster:
+      attributes:
+        - key: k8s.cluster.name
+          value: ${env:CLUSTER_NAME}
+          action: upsert
+    batch:
+      send_batch_size: 8192
+      timeout: 5s
+
+  exporters:
+    otlphttp/traces:
+      endpoint: ${env:TRACES_OTLP_ENDPOINT}
+      sending_queue:
+        queue_size: 5000
+      retry_on_failure:
+        max_elapsed_time: 120s
+    prometheusremotewrite:
+      endpoint: ${env:AMP_REMOTE_WRITE_URL}
+      auth:
+        authenticator: sigv4auth
+      resource_to_telemetry_conversion:
+        enabled: true
+    elasticsearch/logs:
+      endpoints: ["${env:LOGS_ENDPOINT}"]
+      logs_index: otel-logs
+
+  service:
+    extensions: [health_check, sigv4auth]
+    pipelines:
+      traces:
+        receivers: [otlp]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [otlphttp/traces]
+      metrics:
+        receivers: [otlp]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [prometheusremotewrite]
+      logs:
+        receivers: [otlp]
+        processors: [memory_limiter, resource/cluster, batch]
+        exporters: [elasticsearch/logs]

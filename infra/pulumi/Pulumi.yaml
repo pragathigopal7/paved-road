@@ -1,0 +1,7 @@
+name: paved-platform
+description: In cluster platform layer for paved-road (add-ons, team tenancy, CI runners).
+runtime:
+  name: python
+  options:
+    toolchain: pip
+    virtualenv: venv

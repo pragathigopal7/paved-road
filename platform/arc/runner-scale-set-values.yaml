@@ -1,0 +1,47 @@
+# Base values for every team's runner scale set (gha-runner-scale-set chart).
+# Pulumi merges per team settings on top: githubConfigUrl, runnerScaleSetName,
+# minRunners and maxRunners. See infra/pulumi/paved_platform/runners.py.
+
+# GitHub App credentials, synced from AWS Secrets Manager into arc-runners.
+githubConfigSecret: arc-github-app
+
+# Kubernetes mode runs job containers as sibling pods through container hooks, so
+# runners never need privileged Docker in Docker. The work volume is a per job EBS
+# volume that disappears with the ephemeral runner.
+containerMode:
+  type: kubernetes
+  kubernetesModeWorkVolumeClaim:
+    accessModes: ["ReadWriteOnce"]
+    storageClassName: gp3
+    resources:
+      requests:
+        storage: 20Gi
+
+template:
+  spec:
+    nodeSelector:
+      paved.dev/workload: ci
+    tolerations:
+      - key: paved.dev/ci
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+    securityContext:
+      fsGroup: 123 # the runner image's group, so the work volume is writable
+    containers:
+      - name: runner
+        image: ghcr.io/actions/actions-runner:2.328.0
+        command: ["/home/runner/run.sh"]
+        env:
+          - name: ACTIONS_RUNNER_REQUIRE_JOB_CONTAINER
+            value: "false"
+        resources:
+          requests:
+            cpu: "1"
+            memory: 2Gi
+          limits:
+            memory: 4Gi
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]

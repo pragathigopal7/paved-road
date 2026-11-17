@@ -1,0 +1,23 @@
+# Actions Runner Controller (gha-runner-scale-set-controller) in arc-systems.
+replicaCount: 1
+
+# Exposes gha_* metrics from the controller and every scale set listener; the
+# GitHubRunner* alerts in platform/prometheus/alerts.yaml are built on them.
+metrics:
+  controllerManagerAddr: ":8080"
+  listenerAddr: ":8080"
+  listenerEndpoint: "/metrics"
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    memory: 256Mi
+
+securityContext:
+  runAsNonRoot: true
+  readOnlyRootFilesystem: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]

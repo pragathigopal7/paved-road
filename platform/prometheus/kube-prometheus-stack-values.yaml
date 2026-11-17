@@ -1,0 +1,40 @@
+# kube-prometheus-stack in `monitoring`: Prometheus Operator, Prometheus,
+# Alertmanager, kube-state-metrics and node exporter. Long term storage is Amazon
+# Managed Prometheus through remote write; Pulumi fills in the URL.
+fullnameOverride: kps
+
+grafana:
+  enabled: false # Amazon Managed Grafana reads from AMP
+
+prometheus:
+  prometheusSpec:
+    # Pick up every ServiceMonitor, PodMonitor and PrometheusRule in the cluster,
+    # not only the ones this chart created. Services ship their own ServiceMonitor.
+    serviceMonitorSelectorNilUsesHelmValues: false
+    podMonitorSelectorNilUsesHelmValues: false
+    ruleSelectorNilUsesHelmValues: false
+    retention: 15d
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        memory: 2Gi
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: gp3
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 50Gi
+
+alertmanager:
+  alertmanagerSpec:
+    replicas: 2
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        memory: 256Mi

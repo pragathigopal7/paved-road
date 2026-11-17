@@ -1,0 +1,7 @@
+{
+  "cluster_name": { "sensitive": false, "type": "string", "value": "paved-dev" },
+  "cluster_endpoint": { "sensitive": false, "type": "string", "value": "https://ABCDEF0123456789.gr7.us-west-2.eks.amazonaws.com" },
+  "cluster_certificate_authority": { "sensitive": false, "type": "string", "value": "Y2EtYnVuZGxl" },
+  "github_oidc_provider_arn": { "sensitive": false, "type": "string", "value": "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com" },
+  "vpc_id": { "sensitive": false, "type": "string", "value": "vpc-0123456789abcdef0" }
+}

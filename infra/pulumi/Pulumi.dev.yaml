@@ -1,0 +1,9 @@
+config:
+  aws:region: us-west-2
+  paved-platform:environment: dev
+  paved-platform:githubOrg: pragathigopal7
+  # Written by the deploy workflow: terraform -chdir=infra/terraform/platform output -json
+  paved-platform:terraformOutputs: tf-outputs.dev.json
+  paved-platform:teamsFile: teams.yaml
+  paved-platform:tracesEndpoint: http://tempo.observability.svc.cluster.local:4318
+  paved-platform:logsEndpoint: https://logs.dev.internal.example.com

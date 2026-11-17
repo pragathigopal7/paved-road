@@ -1,0 +1,29 @@
+# Team onboarding is a pull request to this file. Each team gets a namespace with
+# restricted Pod Security, quotas and default deny ingress; ECR repositories with a
+# GitHub OIDC push role; namespace scoped kubectl access for its SSO role; and its
+# own autoscaling GitHub Actions runner scale set.
+teams:
+  - name: payments
+    sso_role_arn: arn:aws:iam::123456789012:role/aws-reserved/sso.amazonaws.com/AWSReservedSSO_Payments_0123456789abcdef
+    repositories:
+      - pragathigopal7/paved-road
+    services: [orders-consumer, ledger-api]
+    quota:
+      cpu: "20"
+      memory: 64Gi
+      pods: 200
+    runners:
+      min: 0
+      max: 10
+
+  - name: search
+    repositories:
+      - pragathigopal7/search-indexer
+    services: [indexer]
+    quota:
+      cpu: "40"
+      memory: 160Gi
+      pods: 300
+    runners:
+      min: 1
+      max: 20

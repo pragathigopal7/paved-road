@@ -1,0 +1,5 @@
+pulumi>=3.150,<4
+pulumi-aws>=7,<8
+pulumi-kubernetes>=4.20,<5
+PyYAML>=6
+pytest>=8

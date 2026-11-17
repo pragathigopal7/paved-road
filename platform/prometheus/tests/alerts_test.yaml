@@ -1,0 +1,120 @@
+# promtool unit tests for platform/prometheus/alerts.yaml.
+#   make promtool   (extracts the rule groups to build/ and runs these)
+rule_files:
+  - ../../../build/prometheus-rules.yaml
+
+evaluation_interval: 30s
+
+tests:
+  - name: growing lag pages after 10 minutes, stable lag does not
+    interval: 1m
+    input_series:
+      - series: 'kafka_consumer_lag{namespace="payments", consumergroup="orders-consumer", topic="orders", partition="0"}'
+        values: "5000+1000x40"
+      - series: 'kafka_consumer_lag{namespace="search", consumergroup="indexer", topic="docs", partition="0"}'
+        values: "20000x40"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KafkaConsumerLagHigh
+        exp_alerts: []
+      - eval_time: 25m
+        alertname: KafkaConsumerLagHigh
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              namespace: payments
+              consumergroup: orders-consumer
+              topic: orders
+            exp_annotations:
+              summary: "orders-consumer is 30k messages behind on orders and falling further behind"
+              runbook_url: https://github.com/pragathigopal7/paved-road/blob/main/src/paved/runbooks/kafka-consumer-lag.md
+
+  - name: a consumer that stops polling is reported with its consumer group
+    interval: 1m
+    input_series:
+      - series: 'consumer_last_poll_timestamp_seconds{namespace="payments", service="orders-consumer", pod="orders-consumer-7d9f-abcde"}'
+        values: "60+60x5 360x30"
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: KafkaConsumerStalled
+        exp_alerts: []
+      - eval_time: 15m
+        alertname: KafkaConsumerStalled
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              namespace: payments
+              service: orders-consumer
+              consumergroup: orders-consumer
+            exp_annotations:
+              summary: "orders-consumer has not polled Kafka for 9m 0s"
+              runbook_url: https://github.com/pragathigopal7/paved-road/blob/main/src/paved/runbooks/kafka-consumer-lag.md
+
+  - name: nine percent dead letters burns the budget fast; a healthy topic does not
+    interval: 1m
+    input_series:
+      - series: 'messages_processed_total{namespace="payments", topic="orders", outcome="ok"}'
+        values: "0+100x60"
+      - series: 'messages_processed_total{namespace="payments", topic="orders", outcome="dead_letter"}'
+        values: "0+10x60"
+      - series: 'messages_processed_total{namespace="search", topic="docs", outcome="ok"}'
+        values: "0+1000x60"
+      - series: 'messages_processed_total{namespace="search", topic="docs", outcome="dead_letter"}'
+        values: "0x60"
+    alert_rule_test:
+      - eval_time: 15m
+        alertname: ConsumerErrorBudgetBurnFast
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              namespace: payments
+              topic: orders
+            exp_annotations:
+              summary: "orders is burning its error budget 14x too fast"
+              runbook_url: https://github.com/pragathigopal7/paved-road/blob/main/src/paved/runbooks/error-budget-burn.md
+    promql_expr_test:
+      - expr: paved:consumer_error_ratio:rate5m{topic="orders"}
+        eval_time: 15m
+        exp_samples:
+          - labels: 'paved:consumer_error_ratio:rate5m{namespace="payments", topic="orders"}'
+            value: 0.0909090909090909
+
+  - name: a node that stays NotReady for five minutes pages
+    interval: 1m
+    input_series:
+      - series: 'kube_node_status_condition{node="ip-10-40-33-12.us-west-2.compute.internal", condition="Ready", status="true"}'
+        values: "1 1 0x10"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: NodeNotReady
+        exp_alerts: []
+      - eval_time: 8m
+        alertname: NodeNotReady
+        exp_alerts:
+          - exp_labels:
+              severity: page
+              node: ip-10-40-33-12.us-west-2.compute.internal
+              condition: Ready
+              status: "true"
+            exp_annotations:
+              summary: "Node ip-10-40-33-12.us-west-2.compute.internal has been NotReady for 5 minutes"
+              runbook_url: https://github.com/pragathigopal7/paved-road/blob/main/src/paved/runbooks/node-not-ready.md
+
+  - name: jobs waiting on a capped runner scale set raise a ticket
+    interval: 1m
+    input_series:
+      - series: 'gha_assigned_jobs{namespace="arc-runners", name="paved-payments"}'
+        values: "12x30"
+      - series: 'gha_running_jobs{namespace="arc-runners", name="paved-payments"}'
+        values: "10x30"
+    alert_rule_test:
+      - eval_time: 20m
+        alertname: GitHubRunnerJobsQueued
+        exp_alerts:
+          - exp_labels:
+              severity: ticket
+              namespace: arc-runners
+              name: paved-payments
+            exp_annotations:
+              summary: "2 jobs waiting for a runner in scale set paved-payments"
+              runbook_url: https://github.com/pragathigopal7/paved-road/blob/main/src/paved/runbooks/gha-runner-backlog.md
