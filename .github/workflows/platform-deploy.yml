@@ -38,12 +38,12 @@ jobs:
       run:
         working-directory: infra/terraform/platform
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
           aws-region: us-west-2
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.12.x"
           terraform_wrapper: false
@@ -57,7 +57,7 @@ jobs:
             terraform show -no-color tfplan | tail -n 200
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: tfplan-${{ env.ENVIRONMENT }}
           path: infra/terraform/platform/tfplan
@@ -76,16 +76,16 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: aws-actions/configure-aws-credentials@v4
+      - uses: actions/checkout@v7
+      - uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
           aws-region: us-west-2
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.12.x"
           terraform_wrapper: false
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: tfplan-${{ env.ENVIRONMENT }}
           path: infra/terraform/platform
@@ -95,12 +95,12 @@ jobs:
           terraform init -input=false -backend-config="env/$ENVIRONMENT.backend.hcl"
           terraform apply -input=false -lock-timeout=5m tfplan
           terraform output -json > "../../pulumi/tf-outputs.$ENVIRONMENT.json"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - run: pip install -r infra/pulumi/requirements.txt
       - name: Pulumi up (add-ons, team tenancy, runners)
-        uses: pulumi/actions@v6
+        uses: pulumi/actions@v7
         with:
           command: up
           stack-name: ${{ env.ENVIRONMENT }}
