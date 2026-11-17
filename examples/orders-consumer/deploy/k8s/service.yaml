@@ -1,0 +1,32 @@
+# Exposes /metrics for the ServiceMonitor. Consumers take no inbound traffic otherwise.
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders-consumer
+  labels:
+    app.kubernetes.io/name: orders-consumer
+    team: payments
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: orders-consumer
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: orders-consumer
+  labels:
+    app.kubernetes.io/name: orders-consumer
+    team: payments
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: orders-consumer
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s

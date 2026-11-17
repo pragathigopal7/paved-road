@@ -1,0 +1,15 @@
+# Service catalog entry (Backstage format): owner, lifecycle and where to find things.
+apiVersion: backstage.io/v1alpha1
+kind: Component
+metadata:
+  name: orders-consumer
+  description: Kafka consumer for orders
+  annotations:
+    paved.dev/template: kafka-consumer
+    paved.dev/runbooks: kafka-consumer-lag,error-budget-burn,pod-crashloop
+  tags: [python, kafka]
+spec:
+  type: service
+  lifecycle: experimental
+  owner: payments
+  consumesApis: []

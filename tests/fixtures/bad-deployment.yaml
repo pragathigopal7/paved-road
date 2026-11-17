@@ -1,0 +1,47 @@
+# Deliberately violates most of the platform policy. Used by tests and by the README demo.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: legacy-worker
+  namespace: payments
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: legacy-worker
+  template:
+    metadata:
+      labels:
+        app: legacy-worker
+    spec:
+      hostNetwork: true
+      containers:
+        - name: worker
+          image: registry.example.com/legacy-worker:latest
+          securityContext:
+            privileged: true
+          resources:
+            limits:
+              cpu: 500m
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nightly-report
+  namespace: payments
+  annotations:
+    paved.dev/waive: "PR012"
+spec:
+  schedule: "0 3 * * *"
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: nightly-report
+            team: payments
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: report
+              image: registry.example.com/report@sha256:0d4b1a6a6b0f0f3a6e5c1f0e0b6f8e7d6c5b4a3a2b1c0d9e8f7a6b5c4d3e2f1a

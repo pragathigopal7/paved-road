@@ -1,0 +1,42 @@
+{
+  "window": "7d",
+  "source": "Sample export in the shape `paved rightsize --prometheus` builds from cAdvisor and kube-state-metrics.",
+  "workloads": [
+    {
+      "namespace": "payments",
+      "workload": "orders-consumer",
+      "container": "app",
+      "replicas": 4,
+      "requests": { "cpu": "1", "memory": "2Gi" },
+      "limits": { "memory": "2Gi" },
+      "usage": { "cpu_p95": 0.18, "cpu_p99": 0.31, "memory_max_bytes": 314572800 }
+    },
+    {
+      "namespace": "payments",
+      "workload": "ledger-api",
+      "container": "app",
+      "replicas": 6,
+      "requests": { "cpu": "250m", "memory": "512Mi" },
+      "limits": { "cpu": "500m", "memory": "512Mi" },
+      "usage": { "cpu_p95": 0.38, "cpu_p99": 0.47, "memory_max_bytes": 497025024 }
+    },
+    {
+      "namespace": "search",
+      "workload": "indexer",
+      "container": "app",
+      "replicas": 3,
+      "requests": { "cpu": "2", "memory": "8Gi" },
+      "limits": { "memory": "8Gi" },
+      "usage": { "cpu_p95": 1.62, "cpu_p99": 1.9, "memory_max_bytes": 5368709120 }
+    },
+    {
+      "namespace": "platform",
+      "workload": "otel-collector",
+      "container": "otel-collector",
+      "replicas": 3,
+      "requests": { "cpu": "500m", "memory": "1Gi" },
+      "limits": { "memory": "1Gi" },
+      "usage": { "cpu_p95": 0.21, "cpu_p99": 0.35, "memory_max_bytes": 402653184 }
+    }
+  ]
+}

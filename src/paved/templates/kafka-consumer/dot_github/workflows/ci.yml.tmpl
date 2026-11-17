@@ -1,0 +1,21 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  service:
+    # Platform owned pipeline: tests, policy check with PR annotations, image build,
+    # and (on main) a push to ECR through GitHub OIDC. No long lived AWS keys.
+    uses: pragathigopal7/paved-road/.github/workflows/service-ci.yml@@@paved_ref@@
+    with:
+      service-path: .
+      image-name: @@service_name@@
+      push: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      aws-role-arn: ${{ vars.AWS_ECR_PUSH_ROLE_ARN }}
+    permissions:
+      contents: read
+      id-token: write
+      security-events: write

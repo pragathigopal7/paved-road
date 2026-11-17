@@ -1,0 +1,24 @@
+# Scale on consumer lag, not CPU: a consumer that is waiting on a slow downstream is
+# idle on CPU while lag grows. Keep maxReplicaCount at or below the partition count,
+# since extra consumers in a group sit idle.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: orders-consumer
+  labels:
+    app.kubernetes.io/name: orders-consumer
+    team: payments
+spec:
+  scaleTargetRef:
+    name: orders-consumer
+  minReplicaCount: 2
+  maxReplicaCount: 6
+  cooldownPeriod: 300
+  triggers:
+    - type: kafka
+      metadata:
+        bootstrapServers: kafka-bootstrap.kafka.svc.cluster.local:9092
+        consumerGroup: orders-consumer
+        topic: orders
+        lagThreshold: "500"
+        offsetResetPolicy: earliest

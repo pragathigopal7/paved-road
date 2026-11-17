@@ -1,0 +1,56 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "paved-road"
+version = "0.1.0"
+description = "Observable by default platform tooling for Kubernetes services: scaffolding, policy checks, right sizing, runbooks, and an MCP plugin."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [{ name = "Pragathi Gopal" }]
+dependencies = [
+  "click>=8.1",
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+mcp = ["mcp>=2,<3"]
+dev = [
+  "mcp>=2,<3",
+  "pytest>=8",
+  "ruff>=0.6",
+  # Used only to exercise the generated service in tests.
+  "confluent-kafka>=2.5",
+  "prometheus-client>=0.20",
+  "opentelemetry-sdk>=1.27",
+  "opentelemetry-exporter-otlp-proto-http>=1.27",
+]
+
+[project.scripts]
+paved = "paved.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+paved = ["templates/**/*", "runbooks/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests", "infra/pulumi"]
+extend-exclude = ["src/paved/templates", "examples", "build"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
+ignore = ["S101"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S"]
+"infra/pulumi/tests/**" = ["S"]
