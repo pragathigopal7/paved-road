@@ -56,6 +56,7 @@ class PlatformAddons(pulumi.ComponentResource):
             )
             for name, level in SYSTEM_NAMESPACES.items()
         }
+        self.namespaces = namespaces
         self.resources += list(namespaces.values())
 
         def in_ns(name: str, *extra: pulumi.Resource) -> pulumi.ResourceOptions:

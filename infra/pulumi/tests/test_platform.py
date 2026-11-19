@@ -6,6 +6,7 @@ actual inputs Pulumi would send to AWS and Kubernetes.
 
 from __future__ import annotations
 
+import dataclasses
 import json
 import sys
 from pathlib import Path
@@ -175,6 +176,42 @@ def test_runner_scale_sets_are_isolated_and_unprivileged():
 
 
 @pulumi.runtime.test
+def test_platform_runner_exists_for_deploy_and_drift_workflows():
+    workflows = HERE.parents[2] / ".github" / "workflows"
+    targets = {
+        line.split(":", 1)[1].strip()
+        for name in ("platform-deploy.yml", "drift.yml")
+        for line in (workflows / name).read_text().splitlines()
+        if line.strip().startswith("runs-on:")
+    }
+
+    def check():
+        release = MOCKS.named("kubernetes:helm.sh/v3:Release", "arc-platform")
+        values = release.inputs["values"]
+        assert targets == {values["runnerScaleSetName"]} == {"paved-platform"}
+        # Registered on the platform repository only, not the whole account.
+        assert values["githubConfigUrl"] == "https://github.com/pragathigopal7/paved-road"
+        assert "runnerGroup" not in values
+        assert values["containerMode"]["type"] == "kubernetes"
+        # On demand general pool: a spot reclaim must not kill a terraform apply.
+        spec = values["template"]["spec"]
+        assert spec["nodeSelector"] == {"paved.dev/pool": "general"}
+        assert "tolerations" not in spec
+        assert not spec["containers"][0].get("securityContext", {}).get("privileged", False)
+        assert release.inputs["namespace"] == "arc-runners"
+
+    return after_deploy(check)
+
+
+def test_platform_repository_is_configurable_and_validated():
+    assert dataclasses.replace(CFG, platform_repository="acme/infra").platform_repository == (
+        "acme/infra"
+    )
+    with pytest.raises(ConfigError, match="owner/repo"):
+        dataclasses.replace(CFG, platform_repository="not a repo")
+
+
+@pulumi.runtime.test
 def test_metrics_pipeline_writes_to_amp_with_pod_identity():
     def check():
         kps = MOCKS.named("kubernetes:helm.sh/v3:Release", "kube-prometheus-stack")
@@ -237,6 +274,7 @@ QUOTA = {"cpu": "1", "memory": "1Gi", "pods": 1}
     "team,match",
     [
         ({"name": "kube-system", "repositories": ["a/b"], "quota": QUOTA}, "reserved"),
+        ({"name": "platform", "repositories": ["a/b"], "quota": QUOTA}, "reserved"),
         ({"name": "Pay", "repositories": ["a/b"], "quota": QUOTA}, "DNS label"),
         ({"name": "pay", "repositories": [], "quota": QUOTA}, "repositories"),
         ({"name": "pay", "repositories": ["a/b"], "quota": {**QUOTA, "cpu": "lots"}}, "quantity"),

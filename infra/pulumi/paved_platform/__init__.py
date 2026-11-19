@@ -10,7 +10,11 @@ import pulumi_kubernetes as k8s
 
 from paved_platform.addons import PlatformAddons
 from paved_platform.config import PlatformConfig
-from paved_platform.runners import RunnerScaleSet
+from paved_platform.runners import (
+    RunnerScaleSet,
+    platform_scale_set_values,
+    scale_set_values,
+)
 from paved_platform.tenancy import TeamTenancy
 
 
@@ -81,11 +85,18 @@ def build(cfg: PlatformConfig) -> Platform:
     provider = k8s.Provider("eks", kubeconfig=kubeconfig(cfg), enable_server_side_apply=True)
     addons = PlatformAddons(cfg, provider)
     platform = Platform(addons)
+    platform.runners["platform"] = RunnerScaleSet(
+        "platform",
+        platform_scale_set_values(cfg),
+        provider,
+        controller=addons.arc_controller,
+        opts=pulumi.ResourceOptions(depends_on=[addons.namespaces["arc-runners"]]),
+    )
     for team in cfg.teams:
         platform.teams[team.name] = TeamTenancy(team, cfg, provider)
         platform.runners[team.name] = RunnerScaleSet(
-            team,
-            cfg,
+            team.name,
+            scale_set_values(team, cfg),
             provider,
             controller=addons.arc_controller,
             opts=pulumi.ResourceOptions(depends_on=[platform.teams[team.name]]),

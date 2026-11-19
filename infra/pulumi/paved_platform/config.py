@@ -29,6 +29,7 @@ RESERVED_NAMESPACES = {
     "keda",
     "arc-systems",
     "arc-runners",
+    "platform",  # paved-platform is the platform's own runner scale set
 }
 
 
@@ -119,8 +120,14 @@ class PlatformConfig:
     teams: tuple[Team, ...]
     traces_endpoint: str
     logs_endpoint: str
+    # owner/repo the paved-platform runners register on; defaults to <org>/paved-road.
+    platform_repository: str = ""
 
     def __post_init__(self) -> None:
+        if not self.platform_repository:
+            object.__setattr__(self, "platform_repository", f"{self.github_org}/paved-road")
+        if not _REPO.match(self.platform_repository):
+            raise ConfigError("platformRepository must be owner/repo")
         names = [t.name for t in self.teams]
         if len(names) != len(set(names)):
             raise ConfigError("team names must be unique")
@@ -146,4 +153,5 @@ def load(base_dir: Path, cfg: Any, region: str) -> PlatformConfig:
         teams=load_teams((base_dir / (cfg.get("teamsFile") or "teams.yaml")).read_text()),
         traces_endpoint=cfg.require("tracesEndpoint"),
         logs_endpoint=cfg.require("logsEndpoint"),
+        platform_repository=cfg.get("platformRepository") or "",
     )

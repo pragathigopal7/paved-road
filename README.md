@@ -230,6 +230,11 @@ Team onboarding is a pull request to [`teams.yaml`](infra/pulumi/teams.yaml). Ea
 * `kubectl` access for the team's SSO role, scoped to its namespace (EKS access entries);
 * an autoscaling GitHub Actions runner scale set (`runs-on: paved-<team>`).
 
+The platform's own deploy and drift workflows run on `paved-platform`, a scale set
+registered only on this repository and kept on on demand nodes so a spot reclaim never
+interrupts an apply. Standing it up the first time is a one off manual step, described
+in [`infra/pulumi/README.md`](infra/pulumi/README.md#first-deploy).
+
 Cluster add-ons: kube-prometheus-stack writing to Amazon Managed Prometheus, the
 OpenTelemetry collector, KEDA, Cluster Autoscaler (IAM limited to this cluster's node
 groups) and Actions Runner Controller. Runners use ARC's **kubernetes mode**, so CI jobs
@@ -245,7 +250,7 @@ sent to AWS and Kubernetes.
 | --- | --- |
 | [`ci.yml`](.github/workflows/ci.yml) | Ruff and pytest; Terraform fmt, validate, test and tflint; Pulumi unit tests; promtool rule checks and alert unit tests; the example service through the reusable pipeline. |
 | [`service-ci.yml`](.github/workflows/service-ci.yml) | Reusable pipeline every service calls: tests, `paved check` as PR annotations and SARIF, amd64 and arm64 image build, OIDC push to ECR on main with provenance and SBOM. |
-| [`platform-deploy.yml`](.github/workflows/platform-deploy.yml) | Plan, then apply exactly the reviewed plan behind a GitHub environment, then `pulumi up`. Runs on a self hosted scale set inside the VPC because the EKS endpoint is private. Applies are serialized per environment and never cancelled midway. |
+| [`platform-deploy.yml`](.github/workflows/platform-deploy.yml) | Plan, then apply exactly the reviewed plan behind a GitHub environment, then `pulumi up`. Runs on the `paved-platform` scale set inside the VPC because the EKS endpoint is private. Applies are serialized per environment and never cancelled midway. |
 | [`drift.yml`](.github/workflows/drift.yml) | Weekday `plan -detailed-exitcode` per environment; opens or updates an issue on drift. |
 
 Deploy and drift jobs are skipped until the AWS role variables are set, so the repository
@@ -269,7 +274,7 @@ stays green without an AWS account.
 | Suite | Count | Runs offline |
 | --- | --- | --- |
 | Python: policy engine, scaffolder, generated service, right sizing, runbooks, MCP, CLI | 71 tests | yes |
-| Pulumi program (mock engine) | 16 tests | yes |
+| Pulumi program (mock engine) | 19 tests | yes |
 | Terraform `terraform test` with mocked providers | 17 runs | yes |
 | promtool alert unit tests | 5 scenarios | yes |
 

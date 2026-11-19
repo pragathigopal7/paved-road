@@ -48,8 +48,11 @@ and a reclaimed runner just reruns the job.
 
 **Cost.** Kubernetes mode needs a per job volume and does not support every Docker
 feature (for example `docker build` inside the job; use BuildKit or a remote builder).
-Spot reclaims can kill long applies, which is why the state lock runbook exists and why
-deploys can be pinned to an on demand scale set.
+Spot reclaims can kill long applies, so the platform's own `paved-platform` scale set
+runs on the on demand general pool instead; the state lock runbook covers the cases that
+still leave a lock behind. That scale set also creates a bootstrap loop (the runner that
+deploys the platform is deployed by the platform), so the first `pulumi up` per
+environment is run by hand.
 
 ## 5. No CPU limits by default
 

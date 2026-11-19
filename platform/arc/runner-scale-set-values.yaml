@@ -1,8 +1,9 @@
-# Base values for every team's runner scale set (gha-runner-scale-set chart).
-# Pulumi merges per team settings on top: githubConfigUrl, runnerScaleSetName,
-# minRunners and maxRunners. See infra/pulumi/paved_platform/runners.py.
+# Base values for every runner scale set (gha-runner-scale-set chart): one per team
+# plus paved-platform. Pulumi merges githubConfigUrl, runnerScaleSetName, minRunners
+# and maxRunners on top. See infra/pulumi/paved_platform/runners.py.
 
-# GitHub App credentials, synced from AWS Secrets Manager into arc-runners.
+# GitHub App credentials in arc-runners. Created once by hand during bootstrap
+# (infra/pulumi/README.md); syncing it from Secrets Manager is on the roadmap.
 githubConfigSecret: arc-github-app
 
 # Kubernetes mode runs job containers as sibling pods through container hooks, so
