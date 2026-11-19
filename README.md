@@ -36,32 +36,53 @@ paved new ──► service repo ──► GitHub Actions ──► ECR ──�
 ```mermaid
 flowchart LR
   subgraph dev[Developer]
-    cli[paved CLI]
-    ai[AI assistant] -- MCP --> mcp[paved mcp]
+    cli[paved CLI<br/>new, check, rightsize, runbook]
+    ai[AI assistant] -- MCP --> mcp[paved mcp<br/>same tools]
   end
   subgraph gh[GitHub]
-    repo[service repo] --> ci[service-ci.yml<br/>tests, policy gate, build]
-    infra[paved-road repo] --> deploy[platform-deploy.yml<br/>plan, approve, apply]
+    repo[service repo] --> svcci[service-ci.yml<br/>tests, policy gate, multi arch build]
+    infra[paved-road repo] --> ci[ci.yml<br/>lint and offline tests]
+    infra --> deploy[platform-deploy.yml<br/>plan, approve, apply, pulumi up]
+    infra --> drift[drift.yml<br/>weekday plan, issue on drift]
   end
   subgraph aws[AWS account]
+    state[(Terraform state<br/>S3, KMS, native locking)]
     subgraph tf[Terraform foundation]
       vpc[VPC, 3 AZ, flow logs] --- eks[EKS, private endpoint<br/>KMS secrets, access entries]
       oidc[GitHub OIDC roles<br/>plan / apply]
     end
     subgraph pl[Pulumi platform layer]
       tenancy[team namespaces, quotas<br/>ECR, push roles, SSO access]
-      addons[kube-prometheus-stack, OTel collector<br/>KEDA, Cluster Autoscaler]
       arc[ARC runner scale sets<br/>spot, kubernetes mode]
+      kps[kube-prometheus-stack<br/>SLO alerts, Alertmanager]
+      otel[OTel collector]
+      scale[KEDA, Cluster Autoscaler]
     end
+    svc[team services<br/>from the template]
+    ecr[(ECR)]
     amp[(Amazon Managed<br/>Prometheus)]
   end
+  kafka[(Kafka)]
+  traces[(tracing backend)]
+  logs[(OpenSearch logs)]
+
   cli -- scaffold --> repo
-  ci -- OIDC --> ecr[(ECR)]
+  svcci -- OIDC push role --> ecr --> svc
   deploy -- runs on --> arc
+  drift -- runs on --> arc
   deploy -- OIDC --> oidc
-  ecr --> eks
-  eks -- OTLP --> addons --> amp
-  addons -- alerts --> runbooks[runbooks]
+  drift -- OIDC --> oidc
+  oidc --> state
+  tf -- terraform outputs --> pl
+  kafka -- consume --> svc
+  scale -. scale on lag .-> svc
+  svc -- OTLP --> otel
+  kps -- scrape /metrics --> svc
+  otel -- metrics --> amp
+  kps -- remote write --> amp
+  otel -- traces --> traces
+  otel -- logs --> logs
+  kps -- alerts --> runbooks[runbooks]
   mcp -. triage_alert .-> runbooks
 ```
 
