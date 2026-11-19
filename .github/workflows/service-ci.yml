@@ -46,8 +46,8 @@ jobs:
       run:
         working-directory: ${{ inputs.service-path }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ inputs.python-version }}
       - run: pip install -r requirements-dev.txt
@@ -59,8 +59,8 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - name: Install paved
@@ -70,7 +70,7 @@ jobs:
       - name: Policy report for code scanning
         if: always()
         run: paved check "${{ inputs.service-path }}/deploy" --format sarif -o paved.sarif || true
-      - uses: github/codeql-action/upload-sarif@v3
+      - uses: github/codeql-action/upload-sarif@v4
         if: always()
         continue-on-error: true # code scanning may be disabled on private forks
         with:
@@ -84,12 +84,12 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/setup-qemu-action@v3
-      - uses: docker/setup-buildx-action@v3
+      - uses: actions/checkout@v7
+      - uses: docker/setup-qemu-action@v4
+      - uses: docker/setup-buildx-action@v4
       - name: AWS credentials through GitHub OIDC (no stored keys)
         if: inputs.push
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           role-to-assume: ${{ inputs.aws-role-arn }}
           aws-region: ${{ inputs.aws-region }}
@@ -99,7 +99,7 @@ jobs:
         uses: aws-actions/amazon-ecr-login@v2
       # amd64 and arm64: platform nodes are Graviton, CI runners are x86.
       - name: Build${{ inputs.push && ' and push' || '' }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ inputs.service-path }}
           platforms: linux/amd64,linux/arm64
